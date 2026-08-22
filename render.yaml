@@ -1,0 +1,36 @@
+# Render blueprint.
+#
+# READ THIS BEFORE PICKING A PLAN — it matters more for this app than most.
+#
+# Render's free web services spin down after ~15 minutes without an inbound
+# request. For a normal API that's a cold start you barely notice. Here it is
+# much worse, for two reasons:
+#
+#   1. The poller stops. No polling means no detection, so the app is simply
+#      blind whenever you aren't actively looking at it — which is exactly when
+#      you'd want it working.
+#
+#   2. Worse, restarting RESETS every background model. Background subtraction
+#      treats whatever is already in frame as background, so anything parked
+#      during the restart becomes permanently invisible to that camera. A spin-
+#      down doesn't just pause detection, it blinds the app to the vehicles
+#      that were already stopped.
+#
+# So: either pay for a plan that doesn't sleep, or self-host. A Raspberry Pi or
+# an old laptop on your home network is genuinely a better fit — always on, no
+# cold starts, and polling from a residential IP looks far more like ordinary
+# viewing than a datacentre IP hammering the same endpoint.
+services:
+  - type: web
+    name: roadwatch
+    runtime: docker
+    plan: starter          # NOT free — see the note above
+    healthCheckPath: /api/policy
+    autoDeploy: false
+    disk:
+      name: roadwatch-data
+      mountPath: /app/data # SQLite + your labelled events
+      sizeGB: 1
+    envVars:
+      - key: PORT
+        value: 8000

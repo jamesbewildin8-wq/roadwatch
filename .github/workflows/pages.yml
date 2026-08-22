@@ -1,0 +1,98 @@
+# Deploys app/ to GitHub Pages.
+#
+# A plain Pages setting can only serve the repo root or /docs, and the app lives
+# in app/. Rather than restructure the repo to suit that limitation, this
+# workflow uploads app/ as the Pages artifact directly.
+#
+# It also refreshes the camera dataset monthly. OpenStreetMap gains enforcement
+# points continuously, and a dataset frozen at first deploy quietly rots - the
+# app's silence would increasingly mean "stale file" rather than "nothing
+# mapped here", which is the failure mode it can least afford.
+
+name: Deploy to Pages
+
+on:
+  push:
+    branches: [main]
+  schedule:
+    # 04:00 UTC on the 1st. Overpass is a volunteer-run service - monthly is
+    # plenty for data that changes this slowly, and hammering it is rude.
+    - cron: "0 4 1 * *"
+  workflow_dispatch:
+    inputs:
+      refresh_cameras:
+        description: "Re-fetch camera data from OpenStreetMap"
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Refresh camera data
+        if: github.event_name == 'schedule' || inputs.refresh_cameras
+        run: |
+          python tools/fetch_fixed_cameras.py MY ZA -o app/cameras.geojson
+          echo "features=$(python -c "import json;print(len(json.load(open('app/cameras.geojson'))['features']))")" >> $GITHUB_ENV
+
+      - name: Sanity-check the dataset
+        if: github.event_name == 'schedule' || inputs.refresh_cameras
+        run: |
+          # Never ship an empty or broken dataset. An Overpass timeout returning
+          # zero features would otherwise silently replace real data with
+          # nothing, and the app would look like it was working.
+          python - <<'PY'
+          import json, sys
+          d = json.load(open("app/cameras.geojson"))
+          n = len(d.get("features", []))
+          print(f"{n} features")
+          if n < 10:
+              sys.exit(f"refusing to deploy: only {n} features, Overpass likely failed")
+          PY
+
+      - name: Commit refreshed data
+        if: github.event_name == 'schedule' || inputs.refresh_cameras
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add app/cameras.geojson
+          git diff --staged --quiet || git commit -m "chore: refresh camera data (${{ env.features }} points)"
+          git push
+
+      - name: Bump service worker cache
+        run: |
+          # The service worker caches the shell permanently, so a deploy that
+          # doesn't change CACHE will keep serving the old app from the home
+          # screen indefinitely. Stamp it with the commit SHA.
+          sed -i "s/roadwatch-shell-v[0-9a-z]*/roadwatch-shell-${GITHUB_SHA::7}/" app/sw.js
+          grep SHELL_CACHE app/sw.js | head -1
+
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: app
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

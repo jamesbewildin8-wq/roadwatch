@@ -1,0 +1,117 @@
+{
+  "_README": [
+    "Per-country feature policy. A DATA file you maintain - not legal advice.",
+    "",
+    "TWO LAYERS. The top-level flags apply when config.deployment is 'personal'.",
+    "An optional 'published' block overrides them when deployment is 'published'.",
+    "",
+    "Why: the risk profile of the two is completely different. Labelling your own",
+    "private event log 'police' is not the same act as shipping an app to a",
+    "country's drivers that identifies police positions. The first is a personal",
+    "note; the second is a product with users. Personal use runs unrestricted;",
+    "the conservative settings re-arm automatically the moment you publish, so",
+    "the assumption is enforced in code rather than remembered at launch.",
+    "",
+    "FLAGS",
+    "  camera_ingest   NECESSARY BUT NOT SUFFICIENT - country-level only. Whether",
+    "                  a given operator authorises polling is per-feed in",
+    "                  cameras.json, and BOTH must pass.",
+    "  live_alerts     may surface live stopped-vehicle detections",
+    "  police_labeling may label an event as police specifically",
+    "  fixed_cameras   may show published fixed enforcement locations",
+    "  precision       'exact' or 'zone' (snapped to a coarse grid)",
+    "",
+    "Countries with no entry fall through to _default: everything off."
+  ],
+  "_default": {
+    "name": "Unreviewed jurisdiction",
+    "status": "unreviewed",
+    "camera_ingest": false,
+    "live_alerts": false,
+    "police_labeling": false,
+    "fixed_cameras": false,
+    "precision": "zone",
+    "summary": "No reviewed policy for this country. Everything is off until someone reviews it.",
+    "sources": [],
+    "last_reviewed": null
+  },
+  "MY": {
+    "name": "Malaysia",
+    "status": "permitted",
+    "camera_ingest": true,
+    "live_alerts": true,
+    "police_labeling": true,
+    "fixed_cameras": true,
+    "precision": "exact",
+    "summary": "No statute makes reporting police presence an offence, and Waze operates normally with police reporting enabled. Police have publicly asked the public not to share roadblock locations - a request, not a prohibition, but worth watching. Note this assessment covers ALERTING only; whether you may access a given camera feed is a separate question answered per-feed, not here.",
+    "cautions": [
+      "Computer Crimes Act 1997 s.3 - intentional access without authorisation, or in excess of authorised access, is an offence regardless of whether data is obtained or damage caused (up to RM50,000 / 5 years). It has extraterritorial reach. Authorisation is per-feed, not per-country: see cameras.json.",
+      "PDPA 2010 applies to processing imagery of identifiable vehicles and people.",
+      "A feed being publicly viewable in a browser is not the same as automated polling of it being authorised. Read each operator's terms."
+    ],
+    "sources": [
+      "https://www.malaymail.com/news/malaysia/2023/01/29/kl-police-urge-public-not-to-use-waze-to-aid-traffic-offenders/52396",
+      "https://www.piston.my/2023/01/29/police-ask-motorists-not-to-publicise-their-roadblocks-or-presence-on-waze/",
+      "https://www.commonlii.org/my/legis/consol_act/cca1997185/s3.html"
+    ],
+    "last_reviewed": "2026-08-21",
+    "published": {
+      "note": "No change on publishing, but POPIA/PDPA obligations and each feed operator's terms both bind harder once there are users."
+    }
+  },
+  "ZA": {
+    "name": "South Africa",
+    "status": "permitted",
+    "camera_ingest": true,
+    "live_alerts": true,
+    "police_labeling": true,
+    "fixed_cameras": true,
+    "precision": "exact",
+    "summary": "Location-database alerts are fine - Waze runs in South Africa with police reporting enabled. Reg 292A NRTR 2000 prohibits detectors and jammers of speed measuring equipment, but that provision targets radar-receiving hardware; a map database is not a detector, and labelling your own private event log is not one either. Full parity with Malaysia for personal use. The conservative setting re-arms automatically if deployment changes to published, where the act stops being a personal note and becomes a product feature aimed at a country's drivers.",
+    "cautions": [
+      "Reg 292A NRTR 2000 - detectors and jammers of speed measuring equipment. Get a local opinion on whether a camera-derived live alert is distinguishable from a detector.",
+      "ECTA s.86(1) - intentionally accessing or intercepting data without authority or permission is an offence; being superseded by the Cybercrimes Act 19 of 2020 s.2. Authorisation is per-feed: see cameras.json.",
+      "POPIA applies to footage of identifiable people and vehicles - lawful ground, minimality, retention limits. The Information Regulator has been consulting on a CCTV code of conduct; check its current status."
+    ],
+    "sources": [
+      "https://mybroadband.co.za/news/government/135280-speed-camera-detectors-jammers-whats-legal-in-south-africa.html",
+      "https://www.unodc.org/cld/en/legislation/zaf/electronic_communications_and_transactions_act_25_of_2002/chapter_xiii/sections_86-89/sections_86_87.html",
+      "https://www.ensafrica.com/news/detail/9020/navigating-the-legalities-of-web-scraping-in-"
+    ],
+    "last_reviewed": "2026-08-21",
+    "published": {
+      "police_labeling": false,
+      "note": "Reg 292A NRTR 2000 - get a local opinion on whether a camera-derived live police alert distributed to users is distinguishable from a detector before shipping this."
+    }
+  },
+  "FR": {
+    "name": "France",
+    "status": "zone-only",
+    "camera_ingest": true,
+    "live_alerts": true,
+    "police_labeling": false,
+    "fixed_cameras": true,
+    "precision": "zone",
+    "summary": "Exact enforcement positions may not be shown. The compliant pattern is the one Waze uses - coarse 'danger zones' covering a stretch of road rather than a point, and no live police positions. Included here mainly to exercise the zone-precision path.",
+    "cautions": [
+      "Authorities can require alerts to be suppressed entirely during certain operations."
+    ],
+    "sources": [],
+    "last_reviewed": null
+  },
+  "DE": {
+    "name": "Germany",
+    "status": "restricted",
+    "camera_ingest": true,
+    "live_alerts": false,
+    "police_labeling": false,
+    "fixed_cameras": false,
+    "precision": "zone",
+    "summary": "Using a device that alerts to speed camera locations while driving is prohibited. Reporting suggests enforcement in practice targets dedicated hardware rather than phone apps, but that is tolerance, not permission, and it is not something to build a product on. Alerts off.",
+    "cautions": [],
+    "sources": [
+      "https://tyremap.com/blog/radar-detector-apps-legal-europe/"
+    ],
+    "last_reviewed": null
+  }
+}

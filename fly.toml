@@ -1,0 +1,58 @@
+# Fly.io deployment.
+#
+# Chosen over Render/Railway for one reason: Fly has regions in both of your
+# markets - 'sin' (Singapore) for Malaysia and 'jnb' (Johannesburg) for South
+# Africa. Polling Malaysian cameras from a Frankfurt datacentre works fine
+# technically but looks nothing like ordinary viewing traffic, and region
+# choice is the cheapest thing you can do about that.
+#
+#   fly launch --no-deploy --copy-config
+#   fly volumes create roadwatch_data --size 1 --region sin
+#   fly deploy
+#
+# Roughly $5-6/month for the 1GB machine below.
+
+app = "roadwatch"
+primary_region = "sin"        # "jnb" if your cameras are mostly South African
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  PORT = "8000"
+
+[http_service]
+  internal_port = 8000
+  force_https = true          # required for Add to Home Screen + service worker
+
+  # THE IMPORTANT PART. Fly's defaults suspend idle machines to save money, and
+  # that default is actively wrong for this app:
+  #   - suspended means not polling, so it is blind exactly when you are not
+  #     watching it
+  #   - waking up RESETS every background model, and background subtraction
+  #     treats whatever is already in frame as background. Anything parked
+  #     during the sleep becomes permanently invisible to that camera.
+  # A detector that silently loses the vehicles that were already stopped is
+  # worse than one that is plainly offline. Keep it running.
+  auto_stop_machines = false
+  auto_start_machines = true
+  min_machines_running = 1
+
+  [[http_service.checks]]
+    interval = "30s"
+    timeout = "5s"
+    grace_period = "20s"
+    method = "GET"
+    path = "/api/policy"
+
+[[mounts]]
+  source = "roadwatch_data"
+  destination = "/app/data"   # SQLite + your labelled events. Without this,
+                              # every deploy wipes the one thing here you
+                              # cannot regenerate.
+
+[[vm]]
+  # 512MB is too tight: OpenCV plus one MOG2 background model per camera adds
+  # up fast, and the OOM killer takes the whole process rather than one camera.
+  size = "shared-cpu-1x"
+  memory = "1gb"

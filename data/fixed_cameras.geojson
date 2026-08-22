@@ -1,0 +1,78 @@
+{
+  "type": "FeatureCollection",
+  "_note": "SAMPLE DATA - placeholder coordinates, not verified enforcement points. Replace before trusting any of it. Every feature needs a properties.country (ISO-3166 alpha-2) or it will only show in the jurisdiction that happens to be active. Fixed camera locations are published by most road authorities and are carried in OpenStreetMap under highway=speed_camera - see README for the Overpass query.",
+  "features": [
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          101.6215,
+          3.1012
+        ]
+      },
+      "properties": {
+        "kind": "speed_camera",
+        "road": "Sample - replace",
+        "limit_kmh": 90,
+        "direction": "both",
+        "source": "placeholder",
+        "country": "MY"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          101.6869,
+          3.139
+        ]
+      },
+      "properties": {
+        "kind": "red_light_camera",
+        "road": "Sample - replace",
+        "limit_kmh": 60,
+        "direction": "northbound",
+        "source": "placeholder",
+        "country": "MY"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          101.5903,
+          3.0847
+        ]
+      },
+      "properties": {
+        "kind": "average_speed",
+        "road": "Sample - replace",
+        "limit_kmh": 110,
+        "direction": "southbound",
+        "source": "placeholder",
+        "country": "MY"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          28.051,
+          -26.171
+        ]
+      },
+      "properties": {
+        "kind": "average_speed",
+        "road": "Sample ZA - replace",
+        "limit_kmh": 120,
+        "direction": "both",
+        "country": "ZA",
+        "source": "placeholder"
+      }
+    }
+  ]
+}

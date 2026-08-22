@@ -1,0 +1,837 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Roadwatch Fixed</title>
+<meta name="theme-color" content="#17242F">
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Roadwatch">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="stylesheet" href="leaflet.css">
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --base:#101A24; --panel:#17242F; --panel-2:#1D2D3A;
+  --line:#2A3B49; --go:#1B8A5A; --watch:#E0A03A; --stop:#D0342C;
+  --ink:#E6EDF2; --ink-dim:#8CA3B4; --ink-faint:#5E7488;
+  --display:'Barlow Condensed',system-ui,sans-serif;
+  --body:'Inter',system-ui,sans-serif;
+  --mono:'IBM Plex Mono',ui-monospace,monospace;
+}
+*{box-sizing:border-box}
+html,body{margin:0;min-height:100%}
+body{
+  background:var(--base); color:var(--ink); font-family:var(--body);
+  font-size:15px; line-height:1.45; -webkit-font-smoothing:antialiased;
+  padding:calc(12px + env(safe-area-inset-top)) 16px
+          calc(24px + env(safe-area-inset-bottom));
+  max-width:640px; margin:0 auto;
+}
+h1{font-family:var(--display); font-size:22px; font-weight:700;
+   text-transform:uppercase; letter-spacing:.09em; margin:0}
+.head{display:flex; align-items:baseline; gap:10px; margin-bottom:14px}
+.head .tag{font-family:var(--mono); font-size:10px; color:var(--ink-faint);
+  letter-spacing:.14em; text-transform:uppercase}
+
+/* The whole interface is one number: how far to the next enforcement point.
+   Everything else is supporting detail. It's sized to be readable at a glance
+   in a car mount rather than studied. */
+.hero{
+  border:1px solid var(--line); border-left:3px solid var(--line);
+  border-radius:4px; background:var(--panel); padding:18px 16px; margin-bottom:14px;
+}
+.hero.near{border-left-color:var(--watch)}
+.hero.close{border-left-color:var(--stop)}
+.hero .label{font-family:var(--mono); font-size:10px; letter-spacing:.12em;
+  text-transform:uppercase; color:var(--ink-faint)}
+.hero .dist{font-family:var(--display); font-size:64px; font-weight:700;
+  line-height:.95; letter-spacing:-.01em; margin:6px 0 2px}
+.hero.near .dist{color:var(--watch)}
+.hero.close .dist{color:var(--stop)}
+.hero .what{font-family:var(--display); font-size:20px; font-weight:600;
+  letter-spacing:.03em}
+.hero .sub{font-family:var(--mono); font-size:11px; color:var(--ink-dim); margin-top:4px}
+
+.grid{display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:14px}
+.tile{border:1px solid var(--line); border-radius:4px; background:var(--panel);
+  padding:10px 12px}
+.tile b{font-family:var(--mono); font-size:19px; font-weight:500; display:block}
+.tile span{font-size:10px; color:var(--ink-faint); text-transform:uppercase;
+  letter-spacing:.1em}
+
+button{
+  font-family:var(--mono); font-size:11px; letter-spacing:.09em; text-transform:uppercase;
+  background:var(--panel-2); color:var(--ink); border:1px solid var(--line);
+  border-radius:3px; padding:11px 14px; min-height:44px; cursor:pointer;
+  touch-action:manipulation; width:100%;
+}
+button:active{background:var(--line)}
+button:focus-visible{outline:2px solid var(--watch); outline-offset:2px}
+button[disabled]{opacity:.45}
+
+.list{border:1px solid var(--line); border-radius:4px; overflow:hidden}
+.row{display:flex; align-items:center; gap:10px; padding:10px 12px;
+  border-bottom:1px solid var(--line); background:var(--panel)}
+.row:last-child{border-bottom:none}
+.row .d{font-family:var(--mono); font-size:13px; width:64px; flex:0 0 auto; color:var(--ink-dim)}
+.row .n{flex:1; min-width:0}
+.row .n b{font-family:var(--display); font-size:16px; font-weight:600; display:block;
+  letter-spacing:.02em}
+.row .n span{font-family:var(--mono); font-size:10px; color:var(--ink-faint)}
+.row .lim{font-family:var(--mono); font-size:11px; color:var(--ink-dim);
+  border:1px solid var(--line); border-radius:2px; padding:2px 6px; flex:0 0 auto}
+
+.note{font-size:12px; color:var(--ink-faint); line-height:1.6; margin:14px 0}
+.note strong{color:var(--ink-dim)}
+.sec{font-family:var(--display); font-size:15px; text-transform:uppercase;
+  letter-spacing:.11em; color:var(--ink-dim); margin:18px 0 8px}
+.tabs{display:flex; gap:6px; margin-bottom:14px; flex-wrap:wrap}
+.tab{flex:1; background:transparent; border:1px solid var(--line); color:var(--ink-faint)}
+.tab.on{background:var(--panel-2); color:var(--ink); border-color:var(--ink-faint)}
+.view{display:none}
+.view.on{display:block}
+
+/* Score is shown only after a trip ends — never live. A number that moves while
+   you drive is both a distraction and an invitation to chase it. */
+.score{border:1px solid var(--line); border-radius:4px; background:var(--panel);
+  padding:20px 16px; text-align:center; margin-bottom:14px}
+.score .n{font-family:var(--display); font-size:76px; font-weight:700; line-height:.9}
+.score .n.good{color:var(--go)} .score .n.mid{color:var(--watch)} .score .n.bad{color:var(--stop)}
+.score .lbl{font-family:var(--mono); font-size:10px; letter-spacing:.12em;
+  text-transform:uppercase; color:var(--ink-faint); margin-top:6px}
+.bars{display:flex; flex-direction:column; gap:8px; margin:14px 0}
+.bar{display:flex; align-items:center; gap:10px}
+.bar .k{font-family:var(--mono); font-size:10px; color:var(--ink-dim); width:92px;
+  text-transform:uppercase; letter-spacing:.06em; flex:0 0 auto}
+.bar .t{position:relative; height:6px; flex:1; background:var(--panel-2); border-radius:1px;
+  overflow:hidden}
+.bar .f{height:100%; background:var(--go); transition:width .4s}
+.bar .f.mid{background:var(--watch)} .bar .f.bad{background:var(--stop)}
+.bar .v{font-family:var(--mono); font-size:10px; color:var(--ink-dim); width:28px;
+  text-align:right; flex:0 0 auto}
+.trip{border:1px solid var(--line); border-radius:4px; background:var(--panel);
+  padding:10px 12px; margin-bottom:8px; display:flex; align-items:center; gap:12px}
+.trip .s{font-family:var(--display); font-size:26px; font-weight:700; width:46px;
+  flex:0 0 auto; text-align:center}
+.trip .m{flex:1; min-width:0}
+.trip .m b{font-family:var(--mono); font-size:11px; color:var(--ink-dim); display:block}
+.trip .m span{font-family:var(--mono); font-size:10px; color:var(--ink-faint)}
+@media(prefers-reduced-motion:reduce){ .bar .f{transition:none} }
+
+#map{height:58dvh; min-height:300px; border:1px solid var(--line); border-radius:4px;
+  background:#0B131A; margin-bottom:12px}
+.leaflet-container{background:#0B131A; font-family:var(--body)}
+.leaflet-popup-content-wrapper,.leaflet-popup-tip{background:var(--panel); color:var(--ink);
+  border-radius:3px}
+.leaflet-popup-content{margin:9px 12px; font-size:12px}
+.leaflet-popup-content b{font-family:var(--display); font-size:15px}
+.leaflet-bar a{background:var(--panel); color:var(--ink); border-color:var(--line)}
+.leaflet-control-attribution{background:rgba(16,26,36,.8); color:var(--ink-faint); font-size:9px}
+.leaflet-control-attribution a{color:var(--ink-dim)}
+.me{border-radius:50%; background:var(--go); border:2px solid var(--base);
+  box-shadow:0 0 0 4px rgba(27,138,90,.25)}
+.cam-pin{border-radius:50%; background:var(--stop); border:2px solid var(--base)}
+.juris{display:flex; align-items:center; gap:8px}
+.juris label{font-size:10px; color:var(--ink-faint); text-transform:uppercase; letter-spacing:.1em}
+.juris select{flex:1; font-family:var(--display); font-size:16px; font-weight:600;
+  background:var(--panel-2); color:var(--ink); border:1px solid var(--line);
+  border-radius:3px; padding:9px 10px}
+.flags{display:flex; gap:5px; flex-wrap:wrap; margin-top:8px}
+.flag{font-family:var(--mono); font-size:9px; letter-spacing:.07em; text-transform:uppercase;
+  padding:2px 6px; border-radius:2px; border:1px solid var(--line); color:var(--ink-faint)}
+.flag.on{color:var(--go); border-color:rgba(27,138,90,.5)}
+.flag.off{color:var(--stop); border-color:rgba(208,52,44,.45)}
+.cam{border:1px solid var(--line); border-radius:4px; background:var(--panel);
+  padding:11px 12px; margin-bottom:8px}
+.cam.flagged{border-color:var(--stop)}
+.cam-top{display:flex; align-items:center; gap:8px; margin-bottom:7px}
+.cam-top h3{font-family:var(--display); font-size:16px; font-weight:600; margin:0; flex:1}
+.cam-shot{width:100%; aspect-ratio:16/9; border-radius:3px; overflow:hidden;
+  background:#0B131A; border:1px solid var(--line); position:relative}
+.cam-shot img{width:100%; height:100%; object-fit:cover; display:block}
+.cam-shot .ph{position:absolute; inset:0; display:grid; place-items:center; padding:12px;
+  font-family:var(--mono); font-size:10px; color:var(--ink-faint); text-align:center;
+  letter-spacing:.08em; text-transform:uppercase}
+.cam-why{font-family:var(--mono); font-size:10px; color:var(--ink-faint);
+  margin-top:7px; line-height:1.5}
+.warmbar{display:flex; align-items:center; gap:8px; margin-top:8px}
+.warmbar .track{position:relative; height:5px; flex:1; background:var(--panel-2);
+  border-radius:1px; overflow:hidden}
+.warmbar .fill{height:100%; background:var(--watch)}
+.warmbar .txt{font-family:var(--mono); font-size:10px; color:var(--watch); white-space:nowrap}
+.ev{display:flex; gap:10px; padding:9px 12px; border:1px solid var(--line);
+  border-radius:4px; background:var(--panel); margin-bottom:8px}
+.ev .bar{width:2px; align-self:stretch; background:var(--watch); border-radius:1px}
+.ev.confirmed .bar{background:var(--stop)}
+.ev .m{flex:1; min-width:0}
+.ev .m b{font-family:var(--display); font-size:15px; display:block}
+.ev .m span{font-family:var(--mono); font-size:10px; color:var(--ink-faint)}
+.labels{display:flex; gap:4px; flex-wrap:wrap; margin-top:6px}
+.labels button{width:auto; font-size:9px; padding:4px 7px; min-height:30px}
+
+.keyrow{display:flex; gap:8px; margin-bottom:10px}
+.keyrow input{flex:1; min-width:0; font-family:var(--mono); font-size:16px;
+  background:var(--panel-2); color:var(--ink); border:1px solid var(--line);
+  border-radius:3px; padding:9px 10px}
+.keyrow button{width:auto; flex:0 0 auto}
+.maprow{display:flex; gap:8px; margin-bottom:10px}
+.maprow button{flex:1}
+
+.warn{border-left:3px solid var(--watch); background:var(--panel);
+  padding:10px 12px; border-radius:0 4px 4px 0; font-size:12px;
+  color:var(--ink-dim); line-height:1.55; margin-bottom:14px}
+</style>
+</head>
+<body>
+
+<div class="head"><h1>Roadwatch</h1><span class="tag" id="mode-tag">offline</span></div>
+
+<div class="tabs">
+  <button class="tab on" data-view="nearby">Nearby</button>
+  <button class="tab" data-view="live" id="tab-live" hidden>Live</button>
+  <button class="tab" data-view="map">Map</button>
+  <button class="tab" data-view="trips">Trips</button>
+</div>
+
+<div class="view on" id="view-nearby">
+<div class="warn">
+  Fixed enforcement points only, from OpenStreetMap. <strong>Incomplete by
+  nature</strong> — a road with nothing shown means nobody mapped it, not that
+  it's clear. Never treat silence here as safe. Obey the posted limit; this is a
+  reference, not a warning system.
+</div>
+
+<div class="hero" id="hero">
+  <div class="label" id="hero-label">Location</div>
+  <div class="dist" id="hero-dist">—</div>
+  <div class="what" id="hero-what">Not tracking</div>
+  <div class="sub" id="hero-sub">Start tracking to see the nearest point ahead.</div>
+</div>
+
+<button id="btn">Start tracking</button>
+
+<div class="grid" style="margin-top:14px">
+  <div class="tile"><b id="t-total">—</b><span>points loaded</span></div>
+  <div class="tile"><b id="t-acc">—</b><span>gps accuracy</span></div>
+</div>
+
+<div class="sec">Nearest</div>
+<div class="list" id="list">
+  <div class="row"><div class="n"><span>Waiting for a position fix…</span></div></div>
+</div>
+
+<div class="note" id="datanote"></div>
+</div><!-- /view-nearby -->
+
+<div class="view" id="view-live">
+  <div id="live-policy" class="warn"></div>
+  <div class="juris">
+    <label for="country">Jurisdiction</label>
+    <select id="country"><option>…</option></select>
+  </div>
+  <div class="grid" style="margin-top:12px">
+    <div class="tile"><b id="l-feeds">—</b><span>feeds up</span></div>
+    <div class="tile"><b id="l-hold">—</b><span>holding</span></div>
+    <div class="tile"><b id="l-warm">—</b><span>warming</span></div>
+    <div class="tile"><b id="l-events">—</b><span>events</span></div>
+  </div>
+  <div class="sec">Feeds</div>
+  <div id="live-cams"></div>
+  <div class="sec">Detections</div>
+  <div id="live-events"></div>
+</div>
+
+<div class="view" id="view-map">
+  <div id="map"></div>
+  <div class="maprow">
+    <button id="map-follow">Follow me</button>
+    <button id="map-traffic">Traffic off</button>
+  </div>
+  <div id="map-note" class="note"></div>
+  <details id="tt-setup">
+    <summary style="cursor:pointer; font-family:var(--mono); font-size:11px;
+      color:var(--ink-dim); text-transform:uppercase; letter-spacing:.08em;
+      margin-bottom:8px">Traffic setup</summary>
+    <div class="note">
+      Base map and camera pins are free and need nothing. <strong>Live traffic
+      is proprietary data</strong> — no open dataset provides it, so it needs a
+      key from a commercial provider. TomTom's free tier is 50,000 tile requests
+      a day with no card required, which is far more than personal use will
+      touch. Get one at developer.tomtom.com, paste it below.
+    </div>
+    <div class="keyrow">
+      <input id="tt-key" type="text" placeholder="TomTom API key" autocomplete="off"
+             autocapitalize="off" spellcheck="false">
+      <button id="tt-save">Save</button>
+    </div>
+    <div class="note">
+      Stored only in this browser, never in the repo. <strong>A key in a static
+      site is readable by anyone who opens it</strong> — restrict yours to your
+      Pages domain in the TomTom dashboard, or someone else will spend your
+      quota.
+    </div>
+  </details>
+</div>
+
+<div class="view" id="view-trips">
+  <div class="warn">
+    Scores smoothness — harsh braking, acceleration and cornering — not speed.
+    There is no road speed-limit data here, so a speeding figure would be
+    invented. <strong>The score appears only after you stop</strong>; nothing
+    updates while you drive.
+  </div>
+
+  <button id="trip-btn">Start trip</button>
+  <div id="trip-live" class="note"></div>
+  <div id="trip-result"></div>
+
+  <div class="sec">History</div>
+  <div id="trip-history"></div>
+  <button id="trip-clear" style="margin-top:10px; display:none">Clear history</button>
+</div>
+
+<script src="leaflet.js"></script>
+<script src="trip.js"></script>
+<script>
+const $ = (id) => document.getElementById(id);
+const ALERT_M = 500;      // amber
+const CLOSE_M = 200;      // red + haptic
+// Anything beyond this is not "the nearest point ahead", it is trivia. Without
+// a cap, a dataset covering two countries will cheerfully report a camera
+// 8,000km away as your nearest one, which makes the headline number
+// meaningless exactly when the dataset has no local coverage - the case where
+// you most need to be told so plainly.
+const MAX_LIST_M = 50000;
+let points = [], watchId = null, lastAlerted = new Map();
+
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, m =>
+  ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[m]));
+
+// Equirectangular approximation. Real great-circle distance is pointless at
+// these ranges - the error under 5km is centimetres, and this runs on every
+// GPS tick against every point in the dataset.
+function distM(lat1, lon1, lat2, lon2){
+  const R = 6371000, rad = Math.PI/180;
+  const x = (lon2-lon1)*rad*Math.cos((lat1+lat2)*rad/2);
+  const y = (lat2-lat1)*rad;
+  return Math.sqrt(x*x + y*y) * R;
+}
+
+const fmtD = (m) => m < 1000 ? `${Math.round(m/10)*10} m` : `${(m/1000).toFixed(1)} km`;
+const kindName = (k) => k === "red_light_camera" ? "Red light camera"
+                      : k === "average_speed"   ? "Average speed zone"
+                      : "Speed camera";
+
+async function loadData(){
+  try{
+    const gj = await (await fetch("cameras.geojson")).json();
+    points = (gj.features||[]).map(f => ({
+      lat: f.geometry.coordinates[1],
+      lon: f.geometry.coordinates[0],
+      ...f.properties,
+    }));
+    $("t-total").textContent = points.length;
+    const sample = (gj._source||"").toUpperCase().includes("SAMPLE");
+    $("datanote").innerHTML = sample
+      ? `<strong>Sample data loaded.</strong> These are placeholder coordinates
+         for testing the interface. Run
+         <code>tools/fetch_fixed_cameras.py MY ZA</code> to replace
+         <code>cameras.geojson</code> with real OpenStreetMap data.`
+      : `${points.length} points · ${esc(gj._source||"")} · generated
+         ${esc(gj._generated||"unknown")}`;
+  }catch(e){
+    $("datanote").textContent = "Could not load cameras.geojson.";
+  }
+}
+
+function render(pos){
+  const {latitude:lat, longitude:lon, accuracy} = pos.coords;
+  $("t-acc").textContent = `${Math.round(accuracy)} m`;
+
+  onMapPosition(lat, lon, accuracy);
+
+  const near = points
+    .map(p => ({...p, d: distM(lat, lon, p.lat, p.lon)}))
+    .filter(p => p.d <= MAX_LIST_M)
+    .sort((a,b) => a.d - b.d)
+    .slice(0, 6);
+
+  const hero = $("hero");
+  if (!near.length){
+    hero.className = "hero";
+    $("hero-dist").textContent = "—";
+    $("hero-what").textContent = "Nothing mapped nearby";
+    $("hero-sub").textContent =
+      `No enforcement points within ${MAX_LIST_M/1000} km of you. This means the
+       dataset has no coverage here — not that the road is clear.`;
+    $("list").innerHTML = `<div class="row"><div class="n"><span>No points within
+      ${MAX_LIST_M/1000} km.</span></div></div>`;
+    return;
+  }
+
+  const n = near[0];
+  hero.className = "hero " + (n.d <= CLOSE_M ? "close" : n.d <= ALERT_M ? "near" : "");
+  $("hero-label").textContent = "Nearest enforcement point";
+  $("hero-dist").textContent = fmtD(n.d);
+  $("hero-what").textContent = kindName(n.kind);
+  $("hero-sub").textContent =
+    [n.road, n.limit_kmh ? `${n.limit_kmh} km/h` : null, n.direction]
+      .filter(Boolean).join(" · ") || "no further detail mapped";
+
+  // Haptic once per point per approach, not once per GPS tick. Re-arms only
+  // after you've left the radius, so sitting in traffic beside a camera does
+  // not buzz continuously.
+  const key = `${n.lat},${n.lon}`;
+  if (n.d <= CLOSE_M){
+    if (!lastAlerted.get(key) && navigator.vibrate) navigator.vibrate([120,60,120]);
+    lastAlerted.set(key, true);
+  } else if (n.d > ALERT_M){
+    lastAlerted.delete(key);
+  }
+
+  $("list").innerHTML = near.map(p => `<div class="row">
+      <div class="d">${fmtD(p.d)}</div>
+      <div class="n"><b>${esc(kindName(p.kind))}</b>
+        <span>${esc([p.road, p.direction].filter(Boolean).join(" · ") || "—")}</span></div>
+      ${p.limit_kmh ? `<div class="lim">${p.limit_kmh}</div>` : ""}
+    </div>`).join("");
+}
+
+function start(){
+  if (!navigator.geolocation){
+    $("hero-sub").textContent = "This browser has no geolocation.";
+    return;
+  }
+  watchId = navigator.geolocation.watchPosition(render, (err) => {
+    $("hero-what").textContent = "Location unavailable";
+    $("hero-sub").textContent = err.code === 1
+      ? "Permission denied. Enable location for this site in Settings."
+      : esc(err.message);
+  }, { enableHighAccuracy:true, maximumAge:2000, timeout:15000 });
+  $("btn").textContent = "Stop tracking";
+}
+
+function stop(){
+  if (watchId !== null) navigator.geolocation.clearWatch(watchId);
+  watchId = null;
+  $("btn").textContent = "Start tracking";
+  $("hero").className = "hero";
+  $("hero-what").textContent = "Not tracking";
+  $("hero-dist").textContent = "—";
+  $("hero-sub").textContent = "Start tracking to see the nearest point ahead.";
+}
+
+$("btn").addEventListener("click", () => watchId === null ? start() : stop());
+
+if ("serviceWorker" in navigator){
+  window.addEventListener("load", () =>
+    navigator.serviceWorker.register("sw.js").catch(() => {}));
+}
+
+// ------------------------- trips -------------------------
+// Pulled off the namespace rather than assumed global — see trip.js for why.
+const { TripRecorder, scoreTrip } = window.RoadwatchTrip;
+let rec = null, tripWatch = null;
+
+// localStorage can throw in private mode or when quota is exhausted, and a
+// history feature is not worth breaking the whole app over.
+const store = {
+  get(){ try{ return JSON.parse(localStorage.getItem("rw_trips") || "[]"); }
+         catch(e){ return memTrips; } },
+  set(v){ memTrips = v;
+          try{ localStorage.setItem("rw_trips", JSON.stringify(v)); }catch(e){} },
+};
+let memTrips = [];
+
+document.querySelectorAll(".tab").forEach(b => b.addEventListener("click", () => {
+  document.querySelectorAll(".tab").forEach(x => x.classList.toggle("on", x===b));
+  document.querySelectorAll(".view").forEach(v =>
+    v.classList.toggle("on", v.id === "view-" + b.dataset.view));
+  // Live polling only runs while its tab is open. It is the only view that
+  // costs server requests, and a phone in a pocket should not be making them.
+  if (liveTimer){ clearInterval(liveTimer); liveTimer = null; }
+  if (b.dataset.view === "live" && backend){ pollLive(); liveTimer = setInterval(pollLive, 3000); }
+  if (b.dataset.view === "map"){
+    initMapView();
+    // Leaflet measures its container on creation. Built inside a display:none
+    // view it reads 0x0 and renders a grey box, so invalidate once visible.
+    if (map) setTimeout(() => map.invalidateSize(), 60);
+  }
+}));
+
+const cls = (n) => n >= 80 ? "good" : n >= 55 ? "mid" : "bad";
+const fmtDur = (s) => s >= 3600 ? `${Math.floor(s/3600)}h ${Math.round(s%3600/60)}m`
+                    : `${Math.round(s/60)} min`;
+
+function startTrip(){
+  if (!navigator.geolocation) return;
+  rec = new TripRecorder();
+  if (trackLine) trackLine.setLatLngs([]);
+  $("trip-result").innerHTML = "";
+  $("trip-btn").textContent = "End trip";
+  tripWatch = navigator.geolocation.watchPosition(
+    (pos) => {
+      rec.add(pos);
+      onMapPosition(pos.coords.latitude, pos.coords.longitude, pos.coords.accuracy);
+      if (trackLine) trackLine.addLatLng([pos.coords.latitude, pos.coords.longitude]);
+      const sm = rec.summary();
+      // Distance and duration only. No score, no event count — nothing that
+      // would reward glancing at the phone mid-drive.
+      $("trip-live").textContent =
+        `Recording · ${(sm.distanceM/1000).toFixed(1)} km · ${fmtDur(sm.durationS)}`;
+    },
+    (err) => { $("trip-live").textContent = err.code === 1
+                 ? "Location permission denied." : err.message; },
+    { enableHighAccuracy:true, maximumAge:1000, timeout:20000 }
+  );
+}
+
+function endTrip(){
+  if (tripWatch !== null) navigator.geolocation.clearWatch(tripWatch);
+  tripWatch = null;
+  $("trip-btn").textContent = "Start trip";
+  $("trip-live").textContent = "";
+  if (!rec) return;
+
+  const sum = rec.summary();
+  const sc = scoreTrip(sum);
+  renderResult(sum, sc);
+  if (!sc.tooShort){
+    const trips = store.get();
+    trips.unshift({ at: sum.startedAt, score: sc.score,
+                    km: +(sum.distanceM/1000).toFixed(1), dur: sum.durationS,
+                    components: sc.components });
+    store.set(trips.slice(0, 50));
+    renderHistory();
+  }
+  rec = null;
+}
+
+function renderResult(sum, sc){
+  if (sc.tooShort){
+    $("trip-result").innerHTML = `<div class="note">${esc(sc.reason)}</div>`;
+    return;
+  }
+  const bars = Object.entries(sc.components).map(([k,v]) => `
+    <div class="bar"><span class="k">${esc(k)}</span>
+      <div class="t"><div class="f ${cls(v)}" style="width:${v}%"></div></div>
+      <span class="v">${v}</span></div>`).join("");
+  $("trip-result").innerHTML = `
+    <div class="score">
+      <div class="n ${cls(sc.score)}">${sc.score}</div>
+      <div class="lbl">smoothness score</div>
+    </div>
+    <div class="bars">${bars}</div>
+    <div class="grid">
+      <div class="tile"><b>${sum.maxSpeedKmh}</b><span>max km/h</span></div>
+      <div class="tile"><b>${sum.avgSpeedKmh}</b><span>avg km/h moving</span></div>
+      <div class="tile"><b>${(sum.distanceM/1000).toFixed(1)}</b><span>km</span></div>
+      <div class="tile"><b>${fmtDur(sum.durationS)}</b><span>total time</span></div>
+      <div class="tile"><b>${fmtDur(sum.movingS)}</b><span>moving</span></div>
+      <div class="tile"><b>${fmtDur(sum.stoppedS)}</b><span>stopped</span></div>
+    </div>
+    <div class="note">
+      ${sum.counts.brake} harsh brakes · ${sum.counts.accel} hard accelerations ·
+      ${sum.counts.corner} hard corners${sum.counts.severe ?
+        ` · <strong>${sum.counts.severe} severe</strong>` : ""}<br>
+      per km: ${sc.rates.brakePerKm} / ${sc.rates.accelPerKm} / ${sc.rates.cornerPerKm}<br>
+      peaks: ${Math.abs(sum.peakBrakeMs2)} m/s² braking ·
+      ${sum.peakAccelMs2} m/s² accelerating · ${sum.peakLateralMs2} m/s² lateral<br>
+      ${sum.samples} fixes used${sum.rejected ?
+        ` · ${sum.rejected} discarded for poor accuracy` : ""}
+      <br><br><strong>Max speed is reported, not scored</strong> — without road
+      limit data any speeding figure would be guesswork.
+    </div>`;
+}
+
+function renderHistory(){
+  const trips = store.get();
+  $("trip-clear").style.display = trips.length ? "block" : "none";
+  if (!trips.length){
+    $("trip-history").innerHTML = `<div class="note">No trips recorded yet.</div>`;
+    return;
+  }
+  const avg = Math.round(trips.reduce((a,t)=>a+t.score,0)/trips.length);
+  $("trip-history").innerHTML =
+    `<div class="note">${trips.length} trips · average ${avg}</div>` +
+    trips.map(t => `<div class="trip">
+      <div class="s ${cls(t.score)}">${t.score}</div>
+      <div class="m"><b>${new Date(t.at).toLocaleString()}</b>
+        <span>${t.km} km · ${fmtDur(t.dur)}</span></div>
+    </div>`).join("");
+}
+
+// ------------------------- live (needs backend) -------------------------
+// Everything in this block is optional. The app is designed to be deployed two
+// ways from the same files: served by the FastAPI backend (all four tabs), or
+// dropped on static hosting with no backend at all (Nearby, Map and Trips,
+// which are entirely client-side). So the Live tab is hidden unless a backend
+// actually answers - never shown broken, never assumed present.
+let backend = false, liveTimer = null, livePolicy = {}, liveVerdicts = [];
+// Last frame per camera, kept outside the DOM. pollLive rebuilds the feed list
+// every few seconds, which destroys the <img> element - so a frame fetched
+// asynchronously would land on a node that no longer exists and the thumbnail
+// would never appear at all. Rendering from this cache means the picture
+// survives every re-render and only ever gets newer.
+const frameCache = {};
+
+async function probeBackend(){
+  try{
+    const r = await fetch("api/policy", { cache:"no-store" });
+    if (!r.ok) return false;
+    livePolicy = await r.json();
+    return true;
+  }catch(e){ return false; }
+}
+
+async function initLive(){
+  backend = await probeBackend();
+  $("tab-live").hidden = !backend;
+  $("mode-tag").textContent = backend ? "live + offline" : "offline";
+  if (!backend) return;
+  const j = await (await fetch("api/jurisdictions")).json();
+  const sel = $("country");
+  sel.innerHTML = j.countries.map(c =>
+    `<option value="${esc(c.code)}" ${c.code===j.active?"selected":""}>${esc(c.name)}</option>`
+  ).join("");
+  sel.addEventListener("change", async () => {
+    // Drop cached pictures on a jurisdiction change. Showing a Malaysian feed's
+    // last frame under a South African policy - or under one that forbids
+    // alerts entirely - would leak exactly what the gate exists to stop.
+    clearFrames();
+    await fetch(`api/country?code=${encodeURIComponent(sel.value)}`, { method:"POST" });
+    pollLive();
+  });
+  pollLive();
+}
+
+function flagRow(p){
+  const f = [["camera ingest",p.camera_ingest],["live alerts",p.live_alerts],
+             ["police label",p.police_labeling],["fixed cameras",p.fixed_cameras]];
+  return `<div class="flags">${f.map(([k,v]) =>
+    `<span class="flag ${v?"on":"off"}">${k} ${v?"on":"off"}</span>`).join("")}
+    <span class="flag">precision: ${esc(p.precision)}</span></div>`;
+}
+
+async function pollLive(){
+  if (!backend) return;
+  try{
+    const [cr, er] = await Promise.all([
+      fetch("api/cameras").then(r=>r.json()),
+      fetch("api/events?limit=25").then(r=>r.json()),
+    ]);
+    const p = cr.policy || {}; livePolicy = p;
+    liveVerdicts = er.allowed_verdicts || [];
+    const cams = cr.cameras || [];
+
+    $("l-feeds").textContent  = cams.filter(c=>c.online && c.authorized).length;
+    $("l-hold").textContent   = cams.reduce((n,c)=>n+(c.dwelling||0),0);
+    $("l-warm").textContent   = cams.filter(c=>c.warming && c.authorized && c.online).length;
+    $("l-events").textContent = (er.stats||{}).n ?? 0;
+
+    $("live-policy").innerHTML =
+      `<strong>${esc(p.name)} · ${esc((p.status||"").replace(/-/g," "))}</strong><br>
+       ${esc(p.summary||"")}
+       ${p.tightens_on_publish ? `<br><br><strong>Tightens if published.</strong>
+         ${esc(p.published_note||"")}` : ""}
+       ${flagRow(p)}
+       <div style="font-family:var(--mono);font-size:9px;color:var(--ink-faint);
+         margin-top:6px;text-transform:uppercase;letter-spacing:.08em">
+         ${p.reviewed ? `reviewed ${esc(p.last_reviewed)} — not legal advice`
+                      : "no review on record"}</div>`;
+
+    $("live-cams").innerHTML = cams.map(c => {
+      const warming = c.warming && c.authorized && c.online;
+      const [d,t] = c.warmup_progress || [0,0];
+      return `<div class="cam ${c.dwelling>0?"flagged":""}">
+        <div class="cam-top">
+          <span class="dot ${c.dwelling>0?"alert":warming?"warming":c.online?"on":""}"></span>
+          <h3>${esc(c.name)}</h3>
+          <span class="flag ${c.authorized?(c.authorization==="personal-use"?"":"on"):"off"}">${
+            esc(c.authorized ? c.authorization.replace("-"," ") : "not authorised")}</span>
+        </div>
+        <div class="cam-shot">${
+          (c.online && c.authorized)
+            ? `<img id="shot-${esc(c.id)}" alt="Latest frame from ${esc(c.name)}"${
+                frameCache[c.id] ? ` src="data:image/jpeg;base64,${frameCache[c.id]}"` : ""}>`
+            : `<div class="ph">${esc(!c.authorized
+                 ? "feed not authorised for automated access"
+                 : (c.error || "waiting for first frame"))}</div>`}</div>
+        ${warming ? `<div class="warmbar">
+            <div class="track"><div class="fill" style="width:${t?(d/t)*100:0}%"></div></div>
+            <span class="txt">warming ${d}/${t} · ~${Math.round((c.warmup_eta_s||0)/60)||"<1"} min</span>
+          </div><div class="cam-why">Not detecting yet. Anything already stopped
+            when this started stays invisible to this camera.</div>`
+          : c.authorized ? `<div class="cam-why">${c.tracks||0} tracked · ${
+              c.dwelling||0} holding position</div>`
+          : `<div class="cam-why">${esc(c.authorization_reason||"")}</div>`}
+      </div>`;
+    }).join("") || `<div class="note">No cameras for this jurisdiction.</div>`;
+
+    cams.filter(c=>c.online && c.authorized && !c.warming).forEach(c => liveShot(c.id));
+
+    $("live-events").innerHTML = (er.events||[]).map(e => `
+      <div class="ev ${e.confirmed?"confirmed":""}">
+        <div class="bar"></div>
+        <div class="m"><b>${esc(e.camera_id)}</b>
+          <span>track #${e.track_id} · held ${e.still_frames}f${
+            e.verdict?` · ${esc(e.verdict)}`:""}</span>
+          ${e.verdict ? "" : `<div class="labels">${liveVerdicts.map(v =>
+            `<button data-ev="${e.id}" data-v="${esc(v)}">${esc(v)}</button>`).join("")}</div>`}
+        </div>
+      </div>`).join("") ||
+      `<div class="note">${er.suppressed
+        ? "Live alerts are switched off for this jurisdiction. Detection still runs; the server strips events before they leave the API."
+        : "Nothing detected yet."}</div>`;
+  }catch(e){
+    backend = false; $("tab-live").hidden = true; $("mode-tag").textContent = "offline";
+  }
+}
+
+function clearFrames(){ for (const k in frameCache) delete frameCache[k]; }
+
+async function liveShot(id){
+  try{
+    const r = await fetch(`api/cameras/${encodeURIComponent(id)}/frame`);
+    if (!r.ok) return;
+    const d = await r.json();
+    frameCache[id] = d.jpeg_b64;
+    const el = $(`shot-${id}`);
+    if (el) el.src = `data:image/jpeg;base64,${d.jpeg_b64}`;
+  }catch(e){}
+}
+
+document.addEventListener("click", async (e) => {
+  const b = e.target.closest(".labels button");
+  if (!b) return;
+  b.disabled = true;
+  try{
+    await fetch(`api/events/${b.dataset.ev}/verdict?value=${encodeURIComponent(b.dataset.v)}`,
+                { method:"POST" });
+    pollLive();
+  }catch(err){ b.disabled = false; }
+});
+
+// ------------------------- map -------------------------
+let map = null, meMarker = null, camLayer = null, trackLine = null,
+    trafficLayer = null, follow = true, mapReady = false;
+
+function ttKey(){ try{ return localStorage.getItem("rw_tt_key") || ""; }catch(e){ return ""; } }
+
+function initMapView(){
+  if (mapReady || typeof L === "undefined") return;
+  mapReady = true;
+  map = L.map("map", { zoomControl:true }).setView([3.10,101.62], 12);
+
+  L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png",
+    { attribution:'&copy; OpenStreetMap &copy; CARTO', maxZoom:19 }).addTo(map);
+
+  camLayer = L.layerGroup().addTo(map);
+  points.forEach(p => {
+    L.marker([p.lat, p.lon], { icon: L.divIcon({ className:"",
+      iconSize:[10,10], iconAnchor:[5,5],
+      html:'<div class="cam-pin" style="width:10px;height:10px"></div>' }) })
+     .bindPopup(`<b>${esc(kindName(p.kind))}</b><br>
+       <span style="font-family:var(--mono);font-size:10px">${
+         esc([p.road, p.limit_kmh?p.limit_kmh+" km/h":"", p.direction]
+             .filter(Boolean).join(" · ") || "no detail mapped")}</span>`)
+     .addTo(camLayer);
+  });
+
+  // Dragging the map means you want to look somewhere else. Yanking the view
+  // back on the next GPS tick is the single most irritating thing a map can do.
+  map.on("dragstart", () => { follow = false; $("map-follow").textContent = "Follow me"; });
+
+  trackLine = L.polyline([], { color:"#1B8A5A", weight:4, opacity:.85 }).addTo(map);
+  updateMapNote();
+}
+
+function setTraffic(on){
+  if (!map) return;
+  const key = ttKey();
+  if (on && !key){
+    // Open the setup panel rather than telling them to. Naming a control the
+    // user then has to go find is a wasted instruction.
+    const d = $("tt-setup");
+    if (d){ d.open = true; d.scrollIntoView({ block:"nearest", behavior:"smooth" }); }
+    updateMapNote("No API key saved — paste one in Traffic setup below.");
+    return;
+  }
+  if (trafficLayer){ map.removeLayer(trafficLayer); trafficLayer = null; }
+  if (on){
+    // Raster flow tiles, refreshed every minute upstream. relative0 colours by
+    // speed against free-flow, which is the Waze-style green/amber/red read.
+    trafficLayer = L.tileLayer(
+      "https://api.tomtom.com/traffic/map/4/tile/flow/relative0/{z}/{x}/{y}.png?key=" +
+      encodeURIComponent(key),
+      { maxZoom:22, opacity:.85, attribution:"Traffic &copy; TomTom" });
+    trafficLayer.on("tileerror", () =>
+      updateMapNote("Traffic tiles failed — key may be invalid, restricted to another domain, or over quota."));
+    trafficLayer.addTo(map);
+  }
+  $("map-traffic").textContent = on ? "Traffic on" : "Traffic off";
+  try{ localStorage.setItem("rw_traffic", on ? "1" : "0"); }catch(e){}
+  if (on && key) updateMapNote();
+}
+
+function updateMapNote(msg){
+  if (msg){ $("map-note").textContent = msg; return; }
+  $("map-note").innerHTML = ttKey()
+    ? `${points.length} camera pins · traffic available.
+       Camera pins are from OpenStreetMap and incomplete — an empty road here
+       means unmapped, not clear.`
+    : `${points.length} camera pins · base map free, no key needed.
+       Live traffic needs a provider key (see below) — there is no open dataset
+       for it.`;
+}
+
+function onMapPosition(lat, lon, acc){
+  if (!mapReady) return;
+  if (!meMarker){
+    meMarker = L.marker([lat,lon], { icon: L.divIcon({ className:"",
+      iconSize:[14,14], iconAnchor:[7,7],
+      html:'<div class="me" style="width:14px;height:14px"></div>' }) }).addTo(map);
+  } else meMarker.setLatLng([lat,lon]);
+  if (follow) map.setView([lat,lon], Math.max(map.getZoom(), 15), { animate:false });
+}
+
+$("map-follow").addEventListener("click", () => {
+  follow = !follow;
+  $("map-follow").textContent = follow ? "Following" : "Follow me";
+  if (follow && meMarker) map.setView(meMarker.getLatLng(), Math.max(map.getZoom(), 15));
+});
+$("map-traffic").addEventListener("click", () =>
+  setTraffic(!(trafficLayer !== null)));
+$("tt-save").addEventListener("click", () => {
+  const v = $("tt-key").value.trim();
+  try{ localStorage.setItem("rw_tt_key", v); }catch(e){}
+  updateMapNote(v ? "Key saved. Tap Traffic to enable." : "Key cleared.");
+});
+
+$("trip-btn").addEventListener("click", () => tripWatch === null ? startTrip() : endTrip());
+$("trip-clear").addEventListener("click", () => { store.set([]); renderHistory(); });
+
+loadData().then(() => {
+  $("tt-key").value = ttKey();
+  let want = false;
+  try{ want = localStorage.getItem("rw_traffic") === "1"; }catch(e){}
+  if (want && ttKey()){
+    // Only auto-enable if the map has been opened; otherwise wait.
+    document.querySelector('.tab[data-view="map"]').addEventListener("click",
+      () => setTimeout(() => { if (!trafficLayer) setTraffic(true); }, 100),
+      { once:true });
+  }
+});
+renderHistory();
+initLive();
+
+document.addEventListener("visibilitychange", () => {
+  if (document.hidden && liveTimer){ clearInterval(liveTimer); liveTimer = null; }
+});
+</script>
+</body>
+</html>

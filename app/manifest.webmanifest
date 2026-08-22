@@ -1,0 +1,16 @@
+{
+  "name": "Roadwatch",
+  "short_name": "Roadwatch",
+  "description": "Enforcement cameras, live road-camera detection, and trip scoring.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#101A24",
+  "theme_color": "#17242F",
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
