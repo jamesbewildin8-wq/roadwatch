@@ -322,9 +322,16 @@ function distM(lat1, lon1, lat2, lon2){
 }
 
 const fmtD = (m) => m < 1000 ? `${Math.round(m/10)*10} m` : `${(m/1000).toFixed(1)} km`;
-const kindName = (k) => k === "red_light_camera" ? "Red light camera"
-                      : k === "average_speed"   ? "Average speed zone"
-                      : "Speed camera";
+// Kinds come from the fetch script, which now distinguishes types carried on
+// enforcement relations rather than lumping everything under "speed camera".
+const KINDS = {
+  red_light_camera: "Red light camera",
+  average_speed:    "Average speed zone",
+  anpr_camera:      "Plate-reading camera",
+  checkpoint:       "Enforcement check point",
+  speed_camera:     "Speed camera",
+};
+const kindName = (k) => KINDS[k] || "Enforcement camera";
 
 async function loadData(){
   try{
